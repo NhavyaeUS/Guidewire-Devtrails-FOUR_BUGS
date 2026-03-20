@@ -108,3 +108,21 @@ Escalation automatically notifies operations teams, while clean verification pro
 **Key differentiator**: Physics-based IMU signals (hard to fake) combined with network context reliably separates one-off human issues from scripted, coordinated fraud. [trustdecision](https://trustdecision.com/articles/ride-hailing-apps-fraud)
 
 
+ 
+
+## Data Points Beyond GPS 
+
+
+**Motion physics** from IMU (accelerometer, gyroscope, magnetometer) provide residuals impossible to spoof consistently. [trustdecision](https://trustdecision.com/articles/ride-hailing-apps-fraud) 
+
+**Passive geofencing** via WiFi BSSID and cell tower IDs offers 20-100m accuracy independent of GPS. [bureau](https://bureau.id/resources/blog/detect-location-gps-spoofing) 
+
+**Device intelligence** flags rooted devices, emulators, and multi-account patterns. [bureau](https://bureau.id/resources/blog/detect-location-gps-spoofing) 
+
+**Network graphs** capture shared IPs, addresses, and activity timing correlations. [bureau](https://bureau.id/resources/blog/detect-location-gps-spoofing) 
+
+**Behavioral loops** measure dispute velocity and challenge compliance rates. [bureau](https://bureau.id/resources/blog/detect-location-gps-spoofing) 
+
+**Customer verification** provides proof-of-delivery photos, PIN shares, and timestamp confirmation. [bureau](https://bureau.id/resources/blog/detect-location-gps-spoofing) 
+
+This architecture catches 95%+ of fraud rings while maintaining false positive rates under 2% for honest workers. [trustdecision](https://trustdecision.com/articles/ride-hailing-apps-fraud) 
