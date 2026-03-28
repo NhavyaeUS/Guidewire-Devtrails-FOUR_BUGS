@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Worker {
+  id              String    @id @default(uuid())
+  name            String
+  phone           String    @unique
+  password        String
+  city            String
+  pincode         String
+  zone            String
+  platform        String    // zomato/swiggy/both
+  avgDailyHours   Float
+  avgDailyEarnings Float
+  monthsActive    Int
+  riskScore       Int       @default(50)
+  riskTier        String    @default("Medium")
+  isAdmin         Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  policies  Policy[]
+  claims    Claim[]
+  payouts   Payout[]
+  gpsPings  GpsPing[]
+}
+
+model Policy {
+  id              String    @id @default(uuid())
+  workerId        String
+  tier            String    // basic/standard/pro
+  weeklyPremium   Float
+  maxWeeklyPayout Float
+  coverageStart   DateTime
+  coverageEnd     DateTime
+  status          String    @default("active") // active/expired/cancelled
+  createdAt       DateTime  @default(now())
+
+  worker Worker  @relation(fields: [workerId], references: [id])
+  claims Claim[]
+}
+
+model DisruptionTrigger {
+  id            String    @id @default(uuid())
+  triggerType   String    // heavy_rain/extreme_heat/aqi/flood/curfew
+  city          String
+  zone          String
+  startedAt     DateTime
+  endedAt       DateTime?
+  severityLevel String    // mild/moderate/severe
+  dataSource    String
+  rawData       String?   // JSON string for raw data
+  createdAt     DateTime  @default(now())
+
+  claims Claim[]
+}
+
+model Claim {
+  id              String    @id @default(uuid())
+  workerId        String
+  policyId        String
+  triggerId       String
+  triggeredAt     DateTime
+  hoursCovered    Float
+  calculatedPayout Float
+  fraudScore      Int       @default(0)
+  fraudFlags      String    @default("[]") // JSON string
+  status          String    @default("auto-triggered") // auto-triggered/approved/flagged/rejected/paid
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  worker  Worker            @relation(fields: [workerId], references: [id])
+  policy  Policy            @relation(fields: [policyId], references: [id])
+  trigger DisruptionTrigger @relation(fields: [triggerId], references: [id])
+  payout  Payout?
+}
+
+model Payout {
+  id          String    @id @default(uuid())
+  claimId     String    @unique
+  workerId    String
+  amount      Float
+  upiRef      String?
+  status      String    @default("queued") // queued/processing/completed/failed
+  initiatedAt DateTime  @default(now())
+  completedAt DateTime?
+
+  claim  Claim  @relation(fields: [claimId], references: [id])
+  worker Worker @relation(fields: [workerId], references: [id])
+}
+
+model GpsPing {
+  id        String   @id @default(uuid())
+  workerId  String
+  latitude  Float
+  longitude Float
+  zone      String
+  isActive  Boolean  @default(true)
+  timestamp DateTime @default(now())
+
+  worker Worker @relation(fields: [workerId], references: [id])
+}
