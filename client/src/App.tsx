@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Onboarding from './pages/Onboarding';
 import Policy from './pages/Policy';
 import Profile from './pages/Profile';
+import Appeal from './pages/Appeal';
 import AdminDashboard from './pages/admin/AdminDashboard';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,12 @@ export default function App() {
       <Route path="/profile" element={
         <PrivateRoute>
           <Profile />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/appeal" element={
+        <PrivateRoute>
+          <Appeal />
         </PrivateRoute>
       } />
       

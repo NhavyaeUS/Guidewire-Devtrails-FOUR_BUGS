@@ -1,396 +1,173 @@
 import prisma from '../lib/prisma';
-import { detectFraudAI } from './ai';
 
-interface FraudResult {
+// Haversine distance in km
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Device fingerprint score (0–100)
+async function computeDeviceScore(workerId: string): Promise<number> {
+  const worker = await prisma.worker.findUnique({ where: { id: workerId } });
+  if (!worker) return 50;
+
+  let score = 0;
+  if (worker.isRooted) score += 40;
+  if (worker.isEmulator) score += 40;
+
+  // Check if deviceId is shared across multiple workers
+  if (worker.deviceId) {
+    const sharedCount = await prisma.worker.count({ where: { deviceId: worker.deviceId } });
+    if (sharedCount > 1) score += 30;
+  }
+
+  // Clean device bonus
+  if (!worker.isRooted && !worker.isEmulator && !worker.deviceId) score -= 10;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+// IMU mismatch: GPS movement but flat accelerometer
+async function checkImuMismatch(workerId: string): Promise<boolean> {
+  const pings = await prisma.gpsPing.findMany({
+    where: { workerId },
+    orderBy: { timestamp: 'desc' },
+    take: 5,
+  });
+
+  if (pings.length < 2) return false;
+
+  const IMU_FLAT_THRESHOLD = 0.05;
+  for (let i = 0; i < pings.length - 1; i++) {
+    const dist = haversineKm(pings[i].latitude, pings[i].longitude, pings[i + 1].latitude, pings[i + 1].longitude);
+    const variance = pings[i].accelerometerVariance;
+    if (dist > 0.1 && variance !== null && variance < IMU_FLAT_THRESHOLD) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Historical reputation score
+async function getHistoricalReputation(workerId: string): Promise<number> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [totalClaims, rejectedClaims] = await Promise.all([
+    prisma.claim.count({ where: { workerId, createdAt: { gte: thirtyDaysAgo } } }),
+    prisma.claim.count({ where: { workerId, status: { in: ['rejected', 'flagged'] }, createdAt: { gte: thirtyDaysAgo } } }),
+  ]);
+
+  if (totalClaims === 0) return 50;
+
+  const fraudRate = rejectedClaims / totalClaims;
+  let score = Math.round(fraudRate * 100);
+
+  // Reputation decay bonus for clean workers with substantial history
+  const paidClaims = await prisma.claim.count({ where: { workerId, status: 'paid' } });
+  if (rejectedClaims === 0 && paidClaims >= 10) score -= 5;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+export interface FraudResult {
   fraudScore: number;
   flags: string[];
   recommendation: 'approve' | 'review' | 'reject';
   explanation: string;
+  confidenceMargin: number;
 }
 
-// ─────────────────────────────────────────────
-// Utility: Haversine distance between two GPS coords (returns km)
-// ─────────────────────────────────────────────
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// ─────────────────────────────────────────────
-// Helper: Fetch GPS pings for a worker sorted by time ascending
-// ─────────────────────────────────────────────
-async function getRecentPings(workerId: string, limit: number = 20) {
-  return prisma.gpsPing.findMany({
-    where: { workerId },
-    orderBy: { timestamp: 'asc' },
-    take: limit,
-  });
-}
-
-// ─────────────────────────────────────────────
-// LAYER 1 — Location Validation (zone match + recency)
-// ─────────────────────────────────────────────
-async function validateLocation(
+export async function runFraudDetection(
   workerId: string,
-  workerZone: string
-): Promise<{ passed: boolean; flag: string }> {
-  const latestPing = await prisma.gpsPing.findFirst({
-    where: { workerId },
+  claimData: { triggerType: string; city: string; zone: string; hours: number; payout: number; triggeredAt: Date }
+): Promise<FraudResult> {
+  const flags: string[] = [];
+
+  // 1. GPS zone mismatch check
+  const recentPing = await prisma.gpsPing.findFirst({
+    where: { workerId, isActive: true },
     orderBy: { timestamp: 'desc' },
   });
 
-  if (!latestPing) {
-    return { passed: false, flag: 'inactive during event — no GPS data available' };
-  }
+  const worker = await prisma.worker.findUnique({ where: { id: workerId } });
+  if (!worker) throw new Error('Worker not found');
 
-  const hoursSinceLastPing = (Date.now() - latestPing.timestamp.getTime()) / (1000 * 60 * 60);
-  if (hoursSinceLastPing > 4) {
-    return {
-      passed: false,
-      flag: `inactive during event — last GPS ping over ${Math.round(hoursSinceLastPing)} hours ago`,
-    };
-  }
-
-  if (latestPing.zone !== workerZone) {
-    return {
-      passed: false,
-      flag: `location mismatch — GPS shows worker in ${latestPing.zone}, not in registered zone ${workerZone}`,
-    };
-  }
-
-  return { passed: true, flag: '' };
-}
-
-// ─────────────────────────────────────────────
-// LAYER 2 — Impossible Speed & Location Jump Detection
-//   • Impossible speed: consecutive pings with implied velocity > MAX_SPEED_KMH
-//   • Location jump: distance >> what's possible in elapsed time (hard teleport)
-// ─────────────────────────────────────────────
-const MAX_SPEED_KMH = 80; // max realistic delivery vehicle speed (bike in traffic)
-const MAX_JUMP_KM_PER_MIN = MAX_SPEED_KMH / 60; // ~1.33 km per minute
-
-async function checkSpeedAndJumps(workerId: string): Promise<{ flags: string[]; penaltyPoints: number }> {
-  const pings = await getRecentPings(workerId, 20);
-  const flags: string[] = [];
-  let penaltyPoints = 0;
-
-  if (pings.length < 2) return { flags, penaltyPoints };
-
-  for (let i = 1; i < pings.length; i++) {
-    const prev = pings[i - 1];
-    const curr = pings[i];
-
-    const distKm = haversineKm(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-    const elapsedMs = curr.timestamp.getTime() - prev.timestamp.getTime();
-    const elapsedHours = elapsedMs / (1000 * 60 * 60);
-    const elapsedMins = elapsedMs / (1000 * 60);
-
-    if (elapsedHours <= 0) continue; // identical timestamps, skip
-
-    const speedKmh = distKm / elapsedHours;
-
-    // Check 1: impossible speed
-    if (speedKmh > MAX_SPEED_KMH && distKm > 0.1) {
-      const flag = `impossible speed detected — ${Math.round(speedKmh)} km/h between GPS pings (max realistic: ${MAX_SPEED_KMH} km/h)`;
-      if (!flags.includes(flag)) {
-        flags.push(flag);
-        penaltyPoints += 20; // +20 per type of impossible speed event
-      }
+  if (recentPing) {
+    // Check zone mismatch
+    if (recentPing.zone !== worker.zone && recentPing.zone !== claimData.zone) {
+      flags.push(`location mismatch — GPS shows worker in ${recentPing.zone}, not in registered zone ${worker.zone}`);
     }
 
-    // Check 2: location jump (teleport) — > max km achievable in that time
-    const maxAchievableKm = MAX_JUMP_KM_PER_MIN * elapsedMins;
-    if (distKm > maxAchievableKm + 0.5 && elapsedMins < 30) {
-      // 0.5 km tolerance for GPS jitter; only flag if gap is within 30 min
-      const flag = `location jump detected — ${distKm.toFixed(1)} km in ${Math.round(elapsedMins)} min (max possible: ${maxAchievableKm.toFixed(1)} km)`;
-      if (!flags.includes(flag)) {
-        flags.push(flag);
-        penaltyPoints += 25;
-      }
-    }
-  }
-
-  return { flags, penaltyPoints };
-}
-
-// ─────────────────────────────────────────────
-// LAYER 3 — Activity Validation (orders during disruption)
-// ─────────────────────────────────────────────
-async function validateActivity(
-  workerId: string,
-  triggerTime: Date
-): Promise<{ passed: boolean; flag: string }> {
-  const twoHoursBefore = new Date(triggerTime.getTime() - 2 * 60 * 60 * 1000);
-  const twoHoursAfter = new Date(triggerTime.getTime() + 2 * 60 * 60 * 1000);
-
-  try {
-    const res = await fetch(
-      `http://localhost:${process.env.PORT || 3001}/api/mock/platform-orders/${workerId}?from=${twoHoursBefore.toISOString()}&to=${twoHoursAfter.toISOString()}`
-    );
-    const data = await res.json() as { orders?: Array<{ completedAt: string }> };
-    const ordersDuring = (data.orders || []).filter((o) => {
-      const t = new Date(o.completedAt).getTime();
-      return t >= triggerTime.getTime() && t <= twoHoursAfter.getTime();
+    // Impossible speed check against previous ping
+    const prevPing = await prisma.gpsPing.findFirst({
+      where: { workerId, timestamp: { lt: recentPing.timestamp } },
+      orderBy: { timestamp: 'desc' },
     });
 
-    if (ordersDuring.length >= 3) {
-      return {
-        passed: false,
-        flag: `activity contradiction — worker completed ${ordersDuring.length} orders during the disruption window`,
-      };
+    if (prevPing) {
+      const distKm = haversineKm(prevPing.latitude, prevPing.longitude, recentPing.latitude, recentPing.longitude);
+      const timeDiffHours = (recentPing.timestamp.getTime() - prevPing.timestamp.getTime()) / (1000 * 60 * 60);
+      if (timeDiffHours > 0) {
+        const speedKmh = distKm / timeDiffHours;
+        if (speedKmh > 150) {
+          flags.push(`impossible travel speed: ${Math.round(speedKmh)} km/h detected between GPS pings`);
+        }
+      }
     }
-  } catch {
-    // Mock API inaccessible — skip quietly
   }
 
-  return { passed: true, flag: '' };
-}
+  // 2. IMU mismatch check
+  const imuMismatch = await checkImuMismatch(workerId);
+  if (imuMismatch) {
+    flags.push('IMU mismatch — flat accelerometer signal detected during GPS movement (spoofing suspected)');
+  }
 
-// ─────────────────────────────────────────────
-// LAYER 4 — AI Pattern Analysis (claim history heuristics)
-// ─────────────────────────────────────────────
-async function analyzePatterns(
-  workerId: string,
-  claim: any
-): Promise<{ fraud_risk_score: number; flags: string[]; recommendation: string; explanation: string }> {
-  const eightWeeksAgo = new Date(Date.now() - 8 * 7 * 24 * 60 * 60 * 1000);
-  const claimHistory = await prisma.claim.findMany({
-    where: { workerId, createdAt: { gte: eightWeeksAgo } },
-    orderBy: { createdAt: 'desc' },
-    include: { trigger: true },
-  });
-
-  const gpsResult = claim.gpsFlag || 'passed';
-  const activityResult = claim.activityFlag || 'passed';
-
-  type PrismaClaimWithTrigger = (typeof claimHistory)[number];
-
-  type ClaimHistoryItem = {
-    trigger_type: string;
-    date: string;
-    hours: number;
-    payout: number;
-    status: string;
-  };
-
-  return await detectFraudAI({
-    claimHistory: claimHistory.map((c: PrismaClaimWithTrigger): ClaimHistoryItem => ({
-      trigger_type: c.trigger.triggerType,
-      date: c.triggeredAt.toISOString(),
-      hours: c.hoursCovered,
-      payout: c.calculatedPayout,
-      status: c.status,
-    })),
-    triggerType: claim.triggerType,
-    city: claim.city,
-    zone: claim.zone,
-    hours: claim.hours,
-    payout: claim.payout,
-    gpsResult,
-    activityResult,
-  });
-}
-
-// ─────────────────────────────────────────────
-// LAYER 5 — Duplicate Prevention
-// ─────────────────────────────────────────────
-async function checkDuplicates(
-  workerId: string,
-  triggerTime: Date
-): Promise<{ passed: boolean; flag: string }> {
-  const dayStart = new Date(triggerTime);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(triggerTime);
-  dayEnd.setHours(23, 59, 59, 999);
-
-  const existingApproved = await prisma.claim.findFirst({
+  // 3. Duplicate claim check
+  const recentDuplicate = await prisma.claim.findFirst({
     where: {
       workerId,
-      status: { in: ['approved', 'paid'] },
-      triggeredAt: { gte: dayStart, lte: dayEnd },
+      createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }, // last 1 hour
+      status: { not: 'rejected' },
     },
   });
-
-  if (existingApproved) {
-    return { passed: false, flag: 'duplicate — worker already has an approved claim for this calendar day' };
+  if (recentDuplicate) {
+    flags.push('duplicate claim detected — another claim was filed within the past hour');
   }
 
-  const overlapping = await prisma.claim.findFirst({
-    where: {
-      workerId,
-      status: { in: ['auto-triggered', 'approved', 'paid'] },
-      triggeredAt: {
-        gte: new Date(triggerTime.getTime() - 4 * 60 * 60 * 1000),
-        lte: new Date(triggerTime.getTime() + 4 * 60 * 60 * 1000),
-      },
-    },
-  });
+  // 4. Compute weighted score
+  const [deviceScore, reputationScore] = await Promise.all([
+    computeDeviceScore(workerId),
+    getHistoricalReputation(workerId),
+  ]);
 
-  if (overlapping) {
-    return { passed: false, flag: 'duplicate — overlapping claim already exists for this time window' };
-  }
+  const gpsScore = flags.filter(f => f.includes('location') || f.includes('speed') || f.includes('IMU')).length * 30;
+  const duplicateScore = flags.some(f => f.includes('duplicate')) ? 40 : 0;
 
-  return { passed: true, flag: '' };
-}
+  // Weights: GPS/IMU 40%, device 25%, reputation 20%, duplicate 15%
+  const rawScore = (gpsScore * 0.4) + (deviceScore * 0.25) + (reputationScore * 0.2) + (duplicateScore * 0.15);
 
-// ─────────────────────────────────────────────
-// HISTORICAL REPUTATION helpers
-// ─────────────────────────────────────────────
-async function getHistoricalReputation(workerId: string): Promise<{ score: number; flags: string[] }> {
-  const worker = await prisma.worker.findUnique({ where: { id: workerId } });
-  if (!worker) return { score: 50, flags: [] };
+  // Confidence margin — sparse ping data = ±10 pts
+  const pingCount = await prisma.gpsPing.count({ where: { workerId } });
+  const confidenceMargin = pingCount < 3 ? 10 : 0;
 
-  const flags: string[] = [];
+  const fraudScore = Math.round(Math.max(0, Math.min(100, rawScore)));
 
-  // Fetch all-time legitimate completed claims
-  const completedClaims = await prisma.claim.count({
-    where: { workerId, status: { in: ['approved', 'paid'] } },
-  });
-
-  // Fetch recent rejected / flagged claims (last 30 days)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const recentDisputes = await prisma.claim.count({
-    where: { workerId, status: { in: ['rejected', 'flagged'] }, createdAt: { gte: thirtyDaysAgo } },
-  });
-
-  // Start at a neutral baseline; Bayesian prior: new accounts start at +10
-  let score = worker.monthsActive < 1 ? 60 : 50; // new account penalty
-
-  if (completedClaims >= 100) {
-    score -= 20; // Very established worker
-    } else if (completedClaims >= 20) {
-    score -= 10;
-  } else if (completedClaims === 0) {
-    score += 10; // no track record
-    flags.push('no prior approved claims — new or unverified claimant');
-  }
-
-  if (recentDisputes >= 3) {
-    score += 15;
-    flags.push(`high dispute rate — ${recentDisputes} flagged/rejected claims in last 30 days`);
-  } else if (recentDisputes >= 1) {
-    score += 5;
-  }
-
-  // Long-tenured workers are less risky
-  if (worker.monthsActive >= 12) score -= 5;
-
-  return { score: Math.max(0, Math.min(100, score)), flags };
-}
-
-// ─────────────────────────────────────────────
-// MAIN: Weighted Risk Scoring
-//
-//   Behavioral signals    40% weight
-//   Device signals        20% weight  (static; device fingerprinting not in schema yet)
-//   Network/Graph signals 25% weight  (duplicate + IP-level checks done via duplicate check)
-//   Historical reputation 15% weight
-//
-// Each sub-score is on a 0-100 scale, then combined:
-//   finalScore = 0.40*behavioral + 0.20*device + 0.25*network + 0.15*historical
-// ─────────────────────────────────────────────
-export async function runFraudDetection(
-  workerId: string,
-  claimData: {
-    triggerType: string;
-    city: string;
-    zone: string;
-    hours: number;
-    payout: number;
-    triggeredAt: Date;
-  }
-): Promise<FraudResult> {
-  const allFlags: string[] = [];
-
-  // ── Behavioral score (40%) ─────────────────
-  let behavioralScore = 0;
-
-  // 1a. Zone location mismatch check
-  const locationResult = await validateLocation(workerId, claimData.zone);
-  if (!locationResult.passed) {
-    allFlags.push(locationResult.flag);
-    behavioralScore = Math.max(behavioralScore, 65);
-  }
-
-  // 1b. Activity contradiction (orders during disruption)
-  const activityResult = await validateActivity(workerId, claimData.triggeredAt);
-  if (!activityResult.passed) {
-    allFlags.push(activityResult.flag);
-    behavioralScore = Math.max(behavioralScore, 55);
-  }
-
-  // 1c. Impossible speed + location jump analysis
-  const movementResult = await checkSpeedAndJumps(workerId);
-  if (movementResult.flags.length > 0) {
-    allFlags.push(...movementResult.flags);
-    // Penalty points go directly into behavioral score (capped at 100)
-    behavioralScore = Math.min(100, behavioralScore + movementResult.penaltyPoints);
-  }
-
-  // 1d. AI-driven claim pattern analysis (feeds into behavioral score)
-  const aiResult = await analyzePatterns(workerId, {
-    ...claimData,
-    gpsFlag: locationResult.passed ? 'passed' : locationResult.flag,
-    activityFlag: activityResult.passed ? 'passed' : activityResult.flag,
-  });
-  allFlags.push(...aiResult.flags);
-  // Merge AI score — AI output is itself a behavioral signal
-  behavioralScore = Math.max(behavioralScore, aiResult.fraud_risk_score ?? 0);
-  behavioralScore = Math.min(100, behavioralScore);
-
-  // ── Device score (20%) ────────────────────
-  // Device fingerprinting not yet in schema; using neutral baseline of 50
-  // (will upgrade once deviceId field is added to Worker model)
-  const deviceScore = 50;
-
-  // ── Network / Graph score (25%) ───────────
-  let networkScore = 50; // neutral baseline
-
-  const dupResult = await checkDuplicates(workerId, claimData.triggeredAt);
-  if (!dupResult.passed) {
-    allFlags.push(dupResult.flag);
-    networkScore = Math.max(networkScore, 80); // duplicates are strong network-level signal
-  }
-
-  // ── Historical reputation score (15%) ─────
-  const histResult = await getHistoricalReputation(workerId);
-  allFlags.push(...histResult.flags);
-  const historicalScore = histResult.score;
-
-  // ── Final weighted score ───────────────────
-  const weightedScore =
-    0.40 * behavioralScore +
-    0.20 * deviceScore +
-    0.25 * networkScore +
-    0.15 * historicalScore;
-
-  const finalScore = Math.round(Math.min(100, Math.max(0, weightedScore)));
-
-  // ── Thresholds → recommendation ───────────
   let recommendation: 'approve' | 'review' | 'reject';
-  if (finalScore < 30) {
-    recommendation = 'approve';
-  } else if (finalScore <= 70) {
+  if (fraudScore > 75) {
+    recommendation = 'reject';
+  } else if (fraudScore > 45 || (confidenceMargin > 0 && fraudScore > 35)) {
     recommendation = 'review';
   } else {
-    recommendation = 'reject';
+    recommendation = 'approve';
   }
 
-  return {
-    fraudScore: finalScore,
-    flags: allFlags,
-    recommendation,
-    explanation:
-      allFlags.length > 0
-        ? `Flagged: ${allFlags.join('; ')}`
-        : 'No suspicious patterns detected. Claim appears legitimate.',
-  };
+  const explanation = flags.length > 0
+    ? `${flags.length} fraud signal(s) detected. Score: ${fraudScore}/100.`
+    : `No suspicious patterns detected. Score: ${fraudScore}/100.`;
+
+  return { fraudScore, flags, recommendation, explanation, confidenceMargin };
 }

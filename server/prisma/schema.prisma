@@ -23,11 +23,16 @@ model Worker {
   riskTier        String    @default("Medium")
   isAdmin         Boolean   @default(false)
   createdAt       DateTime  @default(now())
+  deviceId        String?
+  isRooted        Boolean   @default(false)
+  isEmulator      Boolean   @default(false)
+  sharedIp        String?
 
   policies  Policy[]
   claims    Claim[]
   payouts   Payout[]
   gpsPings  GpsPing[]
+  appeals   Appeal[]
 }
 
 model Policy {
@@ -79,6 +84,7 @@ model Claim {
   policy  Policy            @relation(fields: [policyId], references: [id])
   trigger DisruptionTrigger @relation(fields: [triggerId], references: [id])
   payout  Payout?
+  appeals Appeal[]
 }
 
 model Payout {
@@ -103,6 +109,21 @@ model GpsPing {
   zone      String
   isActive  Boolean  @default(true)
   timestamp DateTime @default(now())
+  accelerometerVariance Float?
 
   worker Worker @relation(fields: [workerId], references: [id])
+}
+
+model Appeal {
+  id          String    @id @default(uuid())
+  workerId    String
+  claimId     String
+  reason      String
+  proofUrl    String?
+  status      String    @default("pending") // pending/approved/rejected
+  submittedAt DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  worker Worker @relation(fields: [workerId], references: [id])
+  claim  Claim  @relation(fields: [claimId], references: [id])
 }

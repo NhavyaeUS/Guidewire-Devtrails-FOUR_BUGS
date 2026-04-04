@@ -21,7 +21,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // Get payout status (for polling)
 router.get('/:id/status', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const payout = await prisma.payout.findUnique({ where: { id: req.params.id } });
+    const payout = await prisma.payout.findUnique({ where: { id: req.params.id as string } });
     if (!payout) return res.status(404).json({ error: 'Payout not found' });
     res.json({ status: payout.status, upiRef: payout.upiRef, completedAt: payout.completedAt });
   } catch (error: any) {

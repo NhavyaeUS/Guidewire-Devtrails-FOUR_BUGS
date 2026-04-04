@@ -5,6 +5,7 @@ interface AuthContextType {
   token: string | null;
   login: (token: string, worker: any) => void;
   logout: () => void;
+  updateWorker: (worker: any) => void;
   loading: boolean;
 }
 
@@ -41,8 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('adminPassword');
   };
 
+  const updateWorker = (newWorker: any) => {
+    setWorker(newWorker);
+    localStorage.setItem('worker', JSON.stringify(newWorker));
+  };
+
   return (
-    <AuthContext.Provider value={{ worker, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ worker, token, login, logout, updateWorker, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

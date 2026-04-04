@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
-import { Shield, Sparkles } from 'lucide-react';
+import { Shield, Sparkles, LogOut } from 'lucide-react';
 
 import PolicyCard from '../components/PolicyCard';
 import WeatherPanel from '../components/WeatherPanel';
@@ -9,7 +9,7 @@ import ClaimsTimeline from '../components/ClaimsTimeline';
 import SimulateDisruption from '../components/SimulateDisruption';
 
 export default function Dashboard() {
-  const { worker } = useAuth();
+  const { worker, logout } = useAuth();
   const [data, setData] = useState<{ policy: any, remainingPayout: number, paidThisWeek: number, lifetimePaid: number } | null>(null);
   const [claims, setClaims] = useState<any[]>([]);
   const [triggerUpdate, setTriggerUpdate] = useState(0);
@@ -43,11 +43,16 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold tracking-tight text-teal-50">Hello, {worker?.name?.split(' ')[0]}</h1>
           <p className="text-sm text-teal-400 opacity-80 mt-0.5">{worker?.city} • {worker?.zone}</p>
         </div>
-        <div className="relative">
-          <div className="w-10 h-10 rounded-full bg-teal-800/50 flex items-center justify-center border border-teal-700/50">
-            <Shield size={20} className="text-amber-500" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-teal-950" />
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-teal-800/50 flex items-center justify-center border border-teal-700/50">
+              <Shield size={20} className="text-amber-500" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-teal-950" />
+            </div>
           </div>
+          <button onClick={logout} className="p-2 text-teal-400 hover:text-white transition-colors" title="Log Out">
+            <LogOut size={20} />
+          </button>
         </div>
       </header>
 

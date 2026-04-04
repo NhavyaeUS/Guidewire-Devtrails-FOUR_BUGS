@@ -24,6 +24,33 @@ router.post('/simulate', authMiddleware, async (req: AuthRequest, res: Response)
   }
 });
 
+// Clear simulation (reset all claims for demo purposes)
+router.post('/clear-simulation', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const workerId = req.workerId!;
+    
+    // Find all claims for this worker to delete their triggers and payouts
+    const claims = await prisma.claim.findMany({ where: { workerId } });
+    
+    // Delete payouts
+    await prisma.payout.deleteMany({ where: { workerId } });
+    // Delete claims
+    await prisma.claim.deleteMany({ where: { workerId } });
+    // Delete triggers linked to these claims
+    const triggerIds = claims.map(c => c.triggerId);
+    if (triggerIds.length > 0) {
+      await prisma.disruptionTrigger.deleteMany({ where: { id: { in: triggerIds } } });
+    }
+    // Delete simulator GPS pings
+    await prisma.gpsPing.deleteMany({ where: { workerId } });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Clear simulation error:', error);
+    res.status(500).json({ error: 'Failed to clear simulation' });
+  }
+});
+
 // Get worker's claims
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
