@@ -5,6 +5,8 @@ import KPICards from '../../components/admin/KPICards';
 import PredictivePanel from '../../components/admin/PredictivePanel';
 import ClaimsTable from '../../components/admin/ClaimsTable';
 import FraudQueue from '../../components/admin/FraudQueue';
+import FraudRingPanel from '../../components/admin/FraudRingPanel';
+import RiskDistributionChart from '../../components/admin/RiskDistributionChart';
 import ActiveTriggersMap from '../../components/admin/ActiveTriggersMap';
 import AnalyticsModule from '../../components/admin/AnalyticsModule';
 
@@ -102,7 +104,15 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'fraud' && (
-          <div className="animate-slide-up">
+          <div className="animate-slide-up space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <FraudRingPanel refreshKey={refreshKey} />
+              </div>
+              <div>
+                <RiskDistributionChart refreshKey={refreshKey} />
+              </div>
+            </div>
             <FraudQueue refreshKey={refreshKey} onAction={triggerRefresh} />
           </div>
         )}

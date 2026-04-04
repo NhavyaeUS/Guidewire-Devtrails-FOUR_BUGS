@@ -1,31 +1,46 @@
 import { useState } from 'react';
-import { CloudRain, Sun, Thermometer, Wind, AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import { CloudRain, Thermometer, Wind, AlertTriangle, Loader2, Sparkles } from 'lucide-react';
 import { api } from '../api/client';
 
 export default function SimulateDisruption({ onComplete }: { onComplete: () => void }) {
   const [loading, setLoading] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [activeType, setActiveType] = useState('');
 
-  const simulate = async (type: string, severity: string) => {
+  const simulate = async (type: string) => {
     setLoading(true);
+    setActiveType(type);
+    setErrorMessage('');
+    setSuccessMessage('');
     try {
-      await api.post('/mock/simulate-disruption', { type, severity });
+      const res: any = await api.post('/claims/simulate', { triggerType: type });
       onComplete();
-      setShowOptions(false);
-    } catch (err) {
-      console.error('Simulation failed', err);
+      const msg = res?.message || `Simulated ${type.replace(/_/g, ' ')}. Gemini processed your claim!`;
+      setSuccessMessage(msg);
+      setTimeout(() => {
+        setSuccessMessage('');
+        setShowOptions(false);
+      }, 5000);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Simulation failed — check that the server is running.');
     } finally {
       setLoading(false);
+      setActiveType('');
     }
   };
 
   const clearSimulation = async () => {
     setLoading(true);
+    setErrorMessage('');
     try {
-      await api.post('/mock/clear-disruption');
+      await api.post('/claims/clear-simulation');
       onComplete();
-    } catch (err) {
-      console.error('Clear failed', err);
+      setSuccessMessage('All simulation data cleared successfully.');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to clear simulation.');
     } finally {
       setLoading(false);
     }
@@ -57,6 +72,18 @@ export default function SimulateDisruption({ onComplete }: { onComplete: () => v
         </button>
       </div>
 
+      {successMessage && (
+        <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-sm font-bold text-center">
+          ✅ {successMessage}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm font-bold text-center">
+          ❌ {errorMessage}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         {[
           { id: 'heavy_rain', name: 'Heavy Rain', icon: CloudRain, color: 'text-blue-500' },
@@ -67,7 +94,7 @@ export default function SimulateDisruption({ onComplete }: { onComplete: () => v
           <button
             key={item.id}
             disabled={loading}
-            onClick={() => simulate(item.id, 'severe')}
+            onClick={() => simulate(item.id)}
             className="flex flex-col items-center gap-3 p-4 bg-teal-950/50 hover:bg-teal-900/50 border border-teal-800/30 rounded-2xl transition-all hover:-translate-y-1 active:scale-95"
           >
             <item.icon size={28} className={item.color} strokeWidth={1.5} />

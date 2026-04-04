@@ -8,6 +8,7 @@ import claimRoutes from './routes/claims';
 import payoutRoutes from './routes/payouts';
 import adminRoutes from './routes/admin';
 import mockRoutes from './routes/mock';
+import appealRoutes from './routes/appeals';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ app.use('/api/claims', claimRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mock', mockRoutes);
+app.use('/api/appeals', appealRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

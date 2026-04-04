@@ -37,18 +37,11 @@ export default function Onboarding() {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    async function initOnboarding() {
+    async function fetchTiersAndPricing() {
       try {
-        // Step 1: Run AI Risk Profiling
-        const riskRes = await api.post('/workers/onboard', {});
-        setRiskData(riskRes.riskProfile);
-        updateWorker(riskRes.worker);
-        
-        // Step 2: Fetch tiers
         const tiersRes = await api.get('/policies/tiers');
         setTiers(tiersRes.tiers);
         
-        // Step 3: Get dynamic pricing for all tiers
         const pricingPromises = tiersRes.tiers.map(async (t: Tier) => {
           const res = await api.post('/policies/preview-premium', { tier: t.id });
           return { id: t.id, adjustedPremium: res.adjusted_premium, reason: res.adjustment_reason };
@@ -61,17 +54,27 @@ export default function Onboarding() {
         
         setLoading(false);
       } catch (err: any) {
+        setError('Failed to load coverage pricing.');
+        setLoading(false);
+      }
+    }
+
+    async function initOnboarding() {
+      try {
+        const riskRes = await api.post('/workers/onboard', {});
+        setRiskData(riskRes.riskProfile);
+        updateWorker(riskRes.worker);
+        
+        await fetchTiersAndPricing();
+      } catch (err: any) {
         setError('Failed to initialize onboarding data');
         setLoading(false);
       }
     }
     
-    // Only run if worker needs onboarding
     if (worker && !worker.riskTier) {
       initOnboarding();
-    } else {
-      // If already has risk profile, skip to step 2 (policy selection)
-      // For demo, we just fetch tiers and prices
+    } else if (worker) {
       setRiskData({
         risk_score: worker?.riskScore,
         risk_tier: worker?.riskTier,
@@ -79,7 +82,7 @@ export default function Onboarding() {
         key_risk_factors: ['Current profile data']
       });
       setStep(2);
-      initOnboarding(); // In a real app we'd split the logic, but this gets the tiers and pricing
+      fetchTiersAndPricing(); 
     }
   }, []);
 

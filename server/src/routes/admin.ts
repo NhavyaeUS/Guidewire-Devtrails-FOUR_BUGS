@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { adminMiddleware, AuthRequest } from '../middleware/auth';
 import { predictAnalytics } from '../services/ai';
 import { getScenarioWeather } from '../services/weather';
+import { detectRings } from '../services/ringDetection';
 
 const router = Router();
 
@@ -229,6 +230,52 @@ router.get('/analytics', adminMiddleware, async (_req: AuthRequest, res: Respons
     res.json(resData);
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// Ring Detection
+router.get('/ring-detection', adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    const rings = await detectRings();
+    res.json({ rings });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch ring detection data' });
+  }
+});
+
+// Risk Distribution
+router.get('/risk-distribution', adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    const lowCount = await prisma.worker.count({ where: { riskScore: { lt: 30 } } });
+    const mediumCount = await prisma.worker.count({ where: { riskScore: { gte: 30, lte: 70 } } });
+    const highCount = await prisma.worker.count({ where: { riskScore: { gt: 70 } } });
+
+    res.json({
+      distribution: [
+        { tier: 'Low Risk (<30)', count: lowCount },
+        { tier: 'Monitor (30-70)', count: mediumCount },
+        { tier: 'High Risk (>70)', count: highCount }
+      ]
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch risk distribution' });
+  }
+});
+
+// Fraud Stats
+router.get('/fraud-stats', adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    const totalFlags = await prisma.claim.count({ where: { status: 'flagged' } });
+    const appealsUpheld = await prisma.appeal.count({ where: { status: 'approved' } });
+    const autoRejected = await prisma.claim.count({ where: { status: 'rejected' } });
+
+    res.json({
+      totalFlags,
+      blockRate: Math.round(((autoRejected + totalFlags) / (await prisma.claim.count() || 1)) * 100),
+      estimatedFPR: totalFlags > 0 ? Math.round((appealsUpheld / totalFlags) * 100) : 0
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch fraud stats' });
   }
 });
 

@@ -1,14 +1,17 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const anthropic = process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your-anthropic-api-key-here'
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const genAI = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your-gemini-api-key-here'
+  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   : null;
 
+const MODEL_NAME = 'gemini-2.5-flash-preview-04-17';
+
 function parseJsonResponse(text: string): any {
-  // Try to extract JSON from the response
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  // Strip markdown code fences if present
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     try {
       return JSON.parse(jsonMatch[0]);
@@ -24,7 +27,7 @@ export async function profileRisk(workerData: {
   risk_score: number; risk_tier: string;
   explanation: string; key_risk_factors: string[];
 }> {
-  if (!anthropic) {
+  if (!genAI) {
     // Fallback baseline
     const baseScore = workerData.city === 'Chennai' ? 72 : workerData.city === 'Mumbai' ? 65 : 45;
     const score = Math.min(100, Math.max(1, baseScore + (workerData.hours > 10 ? 10 : 0) - (workerData.months > 12 ? 5 : 0)));
@@ -38,16 +41,12 @@ export async function profileRisk(workerData: {
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      messages: [{
-        role: 'user',
-        content: `You are a risk analyst for a parametric income insurance product for gig delivery workers in India. Given the following worker profile: city = ${workerData.city}, delivery zone = ${workerData.zone}, avg daily earnings = ₹${workerData.earnings}, avg daily working hours = ${workerData.hours}, platform = ${workerData.platform}, months active = ${workerData.months}. Analyze the risk of income disruption due to external events (weather, pollution, civic disruptions) in this worker's typical operating area. Return a JSON object with: risk_score (integer 1–100), risk_tier (Low/Medium/High), explanation (1 sentence, plain language for the worker to read), and key_risk_factors (array of 2–3 short strings). Return ONLY the JSON object, no other text.`
-      }]
-    });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const result = await model.generateContent(
+      `You are a risk analyst for a parametric income insurance product for gig delivery workers in India. Given the following worker profile: city = ${workerData.city}, delivery zone = ${workerData.zone}, avg daily earnings = ₹${workerData.earnings}, avg daily working hours = ${workerData.hours}, platform = ${workerData.platform}, months active = ${workerData.months}. Analyze the risk of income disruption due to external events (weather, pollution, civic disruptions) in this worker's typical operating area. Return a JSON object with: risk_score (integer 1–100), risk_tier (Low/Medium/High), explanation (1 sentence, plain language for the worker to read), and key_risk_factors (array of 2–3 short strings). Return ONLY the JSON object, no other text.`
+    );
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const text = result.response.text();
     const parsed = parseJsonResponse(text);
     if (parsed && parsed.risk_score) return parsed;
   } catch (error) {
@@ -70,7 +69,7 @@ export async function calculatePremium(data: {
   adjusted_premium: number; adjustment_reason: string;
   adjustment_direction: string;
 }> {
-  if (!anthropic) {
+  if (!genAI) {
     const factor = data.riskScore > 70 ? 1.3 : data.riskScore > 40 ? 1.1 : 0.9;
     const adjusted = Math.round(data.basePremium * factor);
     return {
@@ -81,16 +80,12 @@ export async function calculatePremium(data: {
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 400,
-      messages: [{
-        role: 'user',
-        content: `You are an actuarial pricing engine for parametric gig worker insurance. Base weekly premium for ${data.tier} plan is ₹${data.basePremium}. Worker risk profile: city = ${data.city}, zone = ${data.zone}, risk_score = ${data.riskScore}, risk_tier = ${data.riskTier}, avg_daily_earnings = ₹${data.earnings}. Historical disruption frequency for this city (past 12 months): heavy rain days = ${data.rainDays || 25}, extreme heat days = ${data.heatDays || 15}, high AQI days = ${data.aqiDays || 20}, civic disruption events = ${data.civicEvents || 3}. Calculate an adjusted weekly premium. Return JSON: adjusted_premium (integer, ₹), adjustment_reason (1 sentence explaining the change to the worker), adjustment_direction (increase/decrease/no_change). Return ONLY the JSON object.`
-      }]
-    });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const result = await model.generateContent(
+      `You are an actuarial pricing engine for parametric gig worker insurance. Base weekly premium for ${data.tier} plan is ₹${data.basePremium}. Worker risk profile: city = ${data.city}, zone = ${data.zone}, risk_score = ${data.riskScore}, risk_tier = ${data.riskTier}, avg_daily_earnings = ₹${data.earnings}. Historical disruption frequency for this city (past 12 months): heavy rain days = ${data.rainDays || 25}, extreme heat days = ${data.heatDays || 15}, high AQI days = ${data.aqiDays || 20}, civic disruption events = ${data.civicEvents || 3}. Calculate an adjusted weekly premium. Return JSON: adjusted_premium (integer, ₹), adjustment_reason (1 sentence explaining the change to the worker), adjustment_direction (increase/decrease/no_change). Return ONLY the JSON object.`
+    );
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const text = result.response.text();
     const parsed = parseJsonResponse(text);
     if (parsed && parsed.adjusted_premium) return parsed;
   } catch (error) {
@@ -111,7 +106,7 @@ export async function detectFraudAI(data: {
   fraud_risk_score: number; flags: string[];
   recommendation: string; explanation: string;
 }> {
-  if (!anthropic) {
+  if (!genAI) {
     return {
       fraud_risk_score: 15,
       flags: [],
@@ -121,16 +116,12 @@ export async function detectFraudAI(data: {
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      messages: [{
-        role: 'user',
-        content: `You are a fraud detection specialist for a parametric insurance platform. Analyze this claim for suspicious patterns. Worker claim history (last 8 weeks): ${JSON.stringify(data.claimHistory)}. Current claim: trigger_type = ${data.triggerType}, city = ${data.city}, zone = ${data.zone}, claimed_hours = ${data.hours}, calculated_payout = ₹${data.payout}. GPS validation result: ${data.gpsResult}. Activity validation result: ${data.activityResult}. Identify if there are any suspicious patterns. Return JSON: fraud_risk_score (integer 0–100), flags (array of specific red flags found, empty array if none), recommendation (approve/review/reject), explanation (1–2 sentences for the admin reviewer). Return ONLY the JSON object.`
-      }]
-    });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const result = await model.generateContent(
+      `You are a fraud detection specialist for a parametric insurance platform. Analyze this claim for suspicious patterns. Worker claim history (last 8 weeks): ${JSON.stringify(data.claimHistory)}. Current claim: trigger_type = ${data.triggerType}, city = ${data.city}, zone = ${data.zone}, claimed_hours = ${data.hours}, calculated_payout = ₹${data.payout}. GPS validation result: ${data.gpsResult}. Activity validation result: ${data.activityResult}. Identify if there are any suspicious patterns. Return JSON: fraud_risk_score (integer 0–100), flags (array of specific red flags found, empty array if none), recommendation (approve/review/reject), explanation (1–2 sentences for the admin reviewer). Return ONLY the JSON object.`
+    );
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const text = result.response.text();
     const parsed = parseJsonResponse(text);
     if (parsed && typeof parsed.fraud_risk_score === 'number') return parsed;
   } catch (error) {
@@ -151,7 +142,7 @@ export async function predictAnalytics(data: {
   high_risk_cities: string[]; estimated_payout_liability: number;
   recommended_reserve: number; operational_suggestion: string;
 }> {
-  if (!anthropic) {
+  if (!genAI) {
     return {
       high_risk_cities: ['Chennai', 'Mumbai'],
       estimated_payout_liability: 125000,
@@ -161,16 +152,12 @@ export async function predictAnalytics(data: {
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      messages: [{
-        role: 'user',
-        content: `You are a predictive analytics engine for an insurance company covering gig delivery workers in India. Here is the claims and premium data for the past 4 weeks broken down by city: ${JSON.stringify(data.historicalData)}. Next week's weather forecast summary by city: ${JSON.stringify(data.forecast)}. Predict: which 2–3 cities are highest risk for claims next week, estimated total payout liability (in ₹), recommended reserve amount, and one operational suggestion for the insurer. Return JSON: high_risk_cities (array), estimated_payout_liability (integer), recommended_reserve (integer), operational_suggestion (string). Return ONLY the JSON object.`
-      }]
-    });
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const result = await model.generateContent(
+      `You are a predictive analytics engine for an insurance company covering gig delivery workers in India. Here is the claims and premium data for the past 4 weeks broken down by city: ${JSON.stringify(data.historicalData)}. Next week's weather forecast summary by city: ${JSON.stringify(data.forecast)}. Predict: which 2–3 cities are highest risk for claims next week, estimated total payout liability (in ₹), recommended reserve amount, and one operational suggestion for the insurer. Return JSON: high_risk_cities (array), estimated_payout_liability (integer), recommended_reserve (integer), operational_suggestion (string). Return ONLY the JSON object.`
+    );
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    const text = result.response.text();
     const parsed = parseJsonResponse(text);
     if (parsed && parsed.high_risk_cities) return parsed;
   } catch (error) {

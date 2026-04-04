@@ -25,12 +25,12 @@ export async function getWeather(city: string): Promise<{
 
   try {
     const weatherRes = await fetch(`${OWM_BASE}/weather?lat=${coords.lat}&lon=${coords.lon}&appid=${OWM_KEY}&units=metric`);
-    const weatherData = await weatherRes.json();
+    const weatherData: any = await weatherRes.json();
 
     let aqi = 2;
     try {
       const aqiRes = await fetch(`${OWM_BASE}/air_pollution?lat=${coords.lat}&lon=${coords.lon}&appid=${OWM_KEY}`);
-      const aqiData = await aqiRes.json();
+      const aqiData: any = await aqiRes.json();
       aqi = aqiData?.list?.[0]?.main?.aqi || 2;
     } catch {}
 
