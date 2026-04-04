@@ -1,86 +1,57 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../api/client';
-
-interface Worker {
-  id: string;
-  name: string;
-  phone: string;
-  city: string;
-  zone: string;
-  platform: string;
-  avgDailyHours: number;
-  avgDailyEarnings: number;
-  riskScore: number;
-  riskTier: string;
-  isAdmin: boolean;
-}
 
 interface AuthContextType {
-  worker: Worker | null;
+  worker: any | null;
   token: string | null;
-  isLoading: boolean;
-  login: (token: string, worker: Worker) => void;
+  login: (token: string, worker: any) => void;
   logout: () => void;
-  updateWorker: (worker: Worker) => void;
-  setAdminPassword: (password: string) => void;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [worker, setWorker] = useState<Worker | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [isLoading, setIsLoading] = useState(true);
+  const [worker, setWorker] = useState<any | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      if (token) {
-        try {
-          const res = await api.get('/workers/profile');
-          setWorker(res.worker);
-        } catch (error) {
-          console.error('Failed to restore session', error);
-          logout();
-        }
-      }
-      setIsLoading(false);
-    };
+    const savedToken = localStorage.getItem('token');
+    const savedWorker = localStorage.getItem('worker');
 
-    initAuth();
-  }, [token]);
+    if (savedToken && savedWorker) {
+      setToken(savedToken);
+      setWorker(JSON.parse(savedWorker));
+    }
+    setLoading(false);
+  }, []);
 
-  const login = (newToken: string, newWorker: Worker) => {
-    localStorage.setItem('token', newToken);
+  const login = (newToken: string, newWorker: any) => {
     setToken(newToken);
     setWorker(newWorker);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('worker', JSON.stringify(newWorker));
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('adminPassword');
     setToken(null);
     setWorker(null);
-  };
-
-  const updateWorker = (updatedWorker: Worker) => {
-    setWorker(updatedWorker);
-  };
-
-  const setAdminPassword = (password: string) => {
-    localStorage.setItem('adminPassword', password);
+    localStorage.removeItem('token');
+    localStorage.removeItem('worker');
+    localStorage.removeItem('adminPassword');
   };
 
   return (
-    <AuthContext.Provider value={{ worker, token, isLoading, login, logout, updateWorker, setAdminPassword }}>
-      {children}
+    <AuthContext.Provider value={{ worker, token, login, logout, loading }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

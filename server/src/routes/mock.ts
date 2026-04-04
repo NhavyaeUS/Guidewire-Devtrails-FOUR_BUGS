@@ -5,7 +5,7 @@ const router = Router();
 
 // GET /api/mock/weather/:city
 router.get('/weather/:city', async (req: Request, res: Response) => {
-  const city = req.params.city;
+  const city = req.params.city as string;
   const scenario = req.query.scenario as string;
 
   if (scenario) {
@@ -22,10 +22,11 @@ router.get('/weather/:city', async (req: Request, res: Response) => {
 
 // GET /api/mock/flood-alert/:city/:zone
 router.get('/flood-alert/:city/:zone', (req: Request, res: Response) => {
-  const { city, zone } = req.params;
+  const city = (req.params.city as string).toLowerCase();
+  const zone = (req.params.zone as string).toLowerCase();
   
   // Seed realistic scenario: Chennai Tambaram floods during NE monsoon (Oct-Dec)
-  const isTambaram = city.toLowerCase() === 'chennai' && zone.toLowerCase() === 'tambaram';
+  const isTambaram = city === 'chennai' && zone === 'tambaram';
   const month = new Date().getMonth(); // 0-11
   const isMonsoon = month >= 9 && month <= 11; // Oct, Nov, Dec
   
@@ -117,6 +118,23 @@ router.get('/gps/:worker_id/latest', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch GPS data' });
   } finally {
     await prisma.$disconnect();
+  }
+});
+
+// GET /api/mock/current-conditions
+router.get('/current-conditions', async (req: Request, res: Response) => {
+  try {
+    const weather = await getWeather('Chennai');
+    res.json({
+      city: 'Chennai',
+      condition: weather.weather_description,
+      temperature: weather.temperature,
+      windSpeed: weather.wind_speed,
+      rainChance: Math.floor(Math.random() * 20), // Mocked for now
+      currentDisruptions: [] // No active disruptions by default
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch current conditions' });
   }
 });
 

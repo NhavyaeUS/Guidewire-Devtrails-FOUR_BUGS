@@ -4,53 +4,43 @@
 
 @layer base {
   body {
-    @apply bg-teal-950 text-white antialiased selection:bg-teal-500/30;
+    @apply font-['Inter',sans-serif] bg-teal-950 text-white min-h-screen overflow-x-hidden;
   }
 }
 
-@layer utilities {
-  .glass-panel {
-    @apply bg-teal-900/40 backdrop-blur-md border border-teal-800/50 shadow-xl;
-  }
-  
+@layer components {
   .glass-card {
-    @apply bg-teal-900/60 backdrop-blur-sm border border-teal-800/60 rounded-2xl shadow-lg relative overflow-hidden;
-  }
-  
-  .glass-card::before {
-    content: '';
-    @apply absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 transition-opacity duration-500;
-  }
-  
-  .glass-card:hover::before {
-    @apply opacity-100;
+    @apply bg-teal-900/40 backdrop-blur-xl border border-teal-700/30 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.3)];
   }
 
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-teal-200 to-teal-400;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-amber-500;
   }
-  
-  .text-gradient-amber {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-600;
+
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-500 hover:to-teal-400 text-white font-semibold rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
   }
-  
-  .glow-effect {
-    @apply relative;
-  }
-  
-  .glow-effect::after {
-    content: '';
-    @apply absolute -inset-1 bg-gradient-to-r from-teal-500 to-amber-500 rounded-lg blur opacity-25 group-hover:opacity-100 transition duration-500 -z-10;
-  }
-  
-  /* Skeleton Loading Animation */
-  .skeleton {
-    @apply bg-teal-800/50 animate-pulse rounded;
+
+  .input-field {
+    @apply w-full bg-teal-950/50 border border-teal-800 rounded-xl py-3 px-4 text-white placeholder-teal-700 outline-none focus:ring-2 focus:ring-teal-500/50 transition-all;
   }
 }
 
-/* Hide scrollbar for clean mobile UI */
-::-webkit-scrollbar {
-  width: 0px;
-  background: transparent;
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+.animate-slide-up {
+  opacity: 0;
+  animation: slideUp 0.6s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }

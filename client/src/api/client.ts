@@ -1,52 +1,28 @@
-const API_BASE = '/api';
+import axios from 'axios';
 
-export class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function request(endpoint: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token');
-  const headers: HeadersInit = {
+const api = axios.create({
+  baseURL: '/api',
+  headers: {
     'Content-Type': 'application/json',
-    ...options.headers,
-  };
+  },
+});
 
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${token}`;
   }
-  
-  // For admin requests, add password if available
-  const adminPassword = localStorage.getItem('adminPassword');
-  if (adminPassword) {
-    headers['x-admin-password'] = adminPassword;
+  return config;
+});
+
+// Handle errors
+api.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    const message = error.response?.data?.error || error.message || 'An unexpected error occurred';
+    return Promise.reject({ ...error, message });
   }
+);
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    let message = 'An error occurred';
-    try {
-      const data = await response.json();
-      message = data.error || message;
-    } catch {
-      message = response.statusText;
-    }
-    throw new ApiError(message, response.status);
-  }
-
-  return response.json();
-}
-
-export const api = {
-  get: (endpoint: string, options?: RequestInit) => request(endpoint, { ...options, method: 'GET' }),
-  post: (endpoint: string, data: any, options?: RequestInit) => request(endpoint, { ...options, method: 'POST', body: JSON.stringify(data) }),
-  patch: (endpoint: string, data: any, options?: RequestInit) => request(endpoint, { ...options, method: 'PATCH', body: JSON.stringify(data) }),
-  delete: (endpoint: string, options?: RequestInit) => request(endpoint, { ...options, method: 'DELETE' }),
-};
+export { api };

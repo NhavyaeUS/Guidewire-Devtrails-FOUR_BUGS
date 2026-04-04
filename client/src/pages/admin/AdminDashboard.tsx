@@ -5,6 +5,8 @@ import KPICards from '../../components/admin/KPICards';
 import PredictivePanel from '../../components/admin/PredictivePanel';
 import ClaimsTable from '../../components/admin/ClaimsTable';
 import FraudQueue from '../../components/admin/FraudQueue';
+import ActiveTriggersMap from '../../components/admin/ActiveTriggersMap';
+import AnalyticsModule from '../../components/admin/AnalyticsModule';
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
@@ -22,24 +24,24 @@ export default function AdminDashboard() {
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-amber-500/30 pb-10">
+    <div className="min-h-screen bg-slate-950 text-slate-50 font-sans selection:bg-amber-500/30 pb-20">
       {/* Admin Header */}
-      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/30">
-              <Shield size={20} className="text-amber-500" />
+      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-white/5 shadow-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-2.5 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+              <Shield size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-lg tracking-tight">GigShield Command Center</h1>
-              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+              <h1 className="font-black text-xl tracking-tighter text-white">GigShield <span className="text-amber-500">HQ</span></h1>
+              <p className="text-[10px] text-slate-500 uppercase font-black tracking-[0.2em] flex items-center gap-1.5 leading-none mt-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" /> Command Center
               </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-6">
-            <nav className="flex space-x-1">
+          <div className="flex items-center gap-8">
+            <nav className="hidden lg:flex items-center bg-slate-950/50 p-1.5 rounded-xl border border-white/5">
               {[
                 { id: 'overview', label: 'Overview', icon: Activity },
                 { id: 'claims', label: 'Claims', icon: FileText },
@@ -52,42 +54,41 @@ export default function AdminDashboard() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest rounded-lg transition-all duration-300 ${
                       isActive 
-                        ? 'bg-slate-800 text-amber-500' 
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-950/20' 
+                        : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
                     }`}
                   >
-                    <Icon size={16} />
+                    <Icon size={14} />
                     {tab.label}
                   </button>
                 );
               })}
             </nav>
             
-            <div className="w-px h-6 bg-slate-800" />
-            
             <button 
               onClick={logout}
-              className="text-slate-400 hover:text-red-400 transition-colors"
+              className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-rose-500/10 text-slate-500 hover:text-rose-500 border border-white/10 hover:border-rose-500/30 rounded-xl transition-all duration-300 group"
               title="Logout"
             >
-              <LogOut size={20} />
+              <LogOut size={20} className="group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
         {activeTab === 'overview' && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-8 animate-slide-up">
             <KPICards refreshKey={refreshKey} />
             
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-8 space-y-8">
+                <ActiveTriggersMap refreshKey={refreshKey} />
                 <ClaimsTable limit={5} refreshKey={refreshKey} onAction={triggerRefresh} />
               </div>
-              <div>
+              <div className="lg:col-span-4 h-full">
                 <PredictivePanel refreshKey={refreshKey} />
               </div>
             </div>
@@ -95,24 +96,20 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'claims' && (
-          <div className="animate-fade-in">
+          <div className="animate-slide-up">
             <ClaimsTable refreshKey={refreshKey} onAction={triggerRefresh} />
           </div>
         )}
 
         {activeTab === 'fraud' && (
-          <div className="animate-fade-in">
+          <div className="animate-slide-up">
             <FraudQueue refreshKey={refreshKey} onAction={triggerRefresh} />
           </div>
         )}
 
         {activeTab === 'analytics' && (
-          <div className="animate-fade-in">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px]">
-              <TrendingUp size={48} className="text-slate-700 mb-4" />
-              <h2 className="text-xl font-bold text-slate-300">Detailed Analytics</h2>
-              <p className="text-slate-500 mt-2">Charts and graphs visualization module.</p>
-            </div>
+          <div className="animate-slide-up">
+            <AnalyticsModule refreshKey={refreshKey} />
           </div>
         )}
       </main>

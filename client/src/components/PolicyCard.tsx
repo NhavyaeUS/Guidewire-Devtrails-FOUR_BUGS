@@ -1,89 +1,68 @@
-import { Shield, Target, Clock } from 'lucide-react';
+import { ShieldCheck, Calendar, ArrowUpRight } from 'lucide-react';
 
-interface PolicyProps {
-  policy: any;
+interface PolicyCardProps {
+  policy: {
+    tier: string;
+    weeklyPremium: number;
+    maxWeeklyPayout: number;
+    coverageStart: string;
+    coverageEnd: string;
+    status: string;
+  };
   remainingPayout: number;
   paidThisWeek: number;
 }
 
-export default function PolicyCard({ policy, remainingPayout, paidThisWeek }: PolicyProps) {
-  if (!policy) return null;
-
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case 'pro': return 'text-amber-500 bg-amber-500/10 border-amber-500/30';
-      case 'standard': return 'text-teal-400 bg-teal-400/10 border-teal-400/30';
-      default: return 'text-teal-200 bg-teal-200/10 border-teal-200/30';
-    }
-  };
-
-  const daysUntilRenewal = () => {
-    const end = new Date(policy.coverageEnd).getTime();
-    const now = new Date().getTime();
-    return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-  };
-
-  const percentUsed = (paidThisWeek / policy.maxWeeklyPayout) * 100;
+export default function PolicyCard({ policy, remainingPayout, paidThisWeek }: PolicyCardProps) {
+  const percentageUsed = (paidThisWeek / (paidThisWeek + remainingPayout)) * 100 || 0;
 
   return (
-    <div className="glass-card p-5 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute -top-10 -right-10 w-32 h-32 bg-teal-500/10 rounded-full blur-2xl" />
-
-      <div className="flex justify-between items-start mb-4 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl border ${getTierColor(policy.tier)}`}>
-            <Shield size={24} strokeWidth={1.5} />
+    <div className="glass-card p-6 overflow-hidden relative group">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full -translate-y-16 translate-x-16 blur-3xl group-hover:bg-teal-500/20 transition-all" />
+      
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 border border-amber-500/30 rounded-full text-amber-500 text-xs font-semibold uppercase tracking-wider mb-3">
+            <ShieldCheck size={14} />
+            {policy.tier} SHIELD ACTIVE
           </div>
-          <div>
-            <h3 className="font-bold text-lg capitalize tracking-tight">{policy.tier} Shield</h3>
-            <p className="text-xs text-teal-400/80 mt-0.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Active Coverage
-            </p>
-          </div>
+          <h2 className="text-3xl font-bold">₹{remainingPayout}</h2>
+          <p className="text-teal-400/60 text-sm mt-1">Remaining weekly payout limit</p>
         </div>
         <div className="text-right">
-          <div className="text-xl font-bold font-mono tracking-tighter">
-            ₹{policy.weeklyPremium}<span className="text-xs font-sans text-teal-500/50">/wk</span>
-          </div>
+          <p className="text-xs text-teal-500/60 uppercase font-medium tracking-widest mb-1">Weekly Premium</p>
+          <p className="text-xl font-semibold text-teal-100 italic">₹{policy.weeklyPremium}</p>
         </div>
       </div>
 
-      <div className="space-y-4 relative z-10 mt-6">
-        <div>
-          <div className="flex justify-between text-xs mb-1.5">
-            <span className="text-teal-300">Weekly Limit</span>
-            <span className="font-medium text-amber-500">₹{remainingPayout} remaining</span>
-          </div>
-          <div className="h-2 w-full bg-teal-950/80 rounded-full overflow-hidden border border-teal-800/50">
-            <div 
-              className={`h-full rounded-full transition-all duration-1000 ${
-                percentUsed > 80 ? 'bg-red-500' : percentUsed > 50 ? 'bg-amber-500' : 'bg-teal-500'
-              }`}
-              style={{ width: `${Math.min(100, Math.max(0, percentUsed))}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-[10px] text-teal-500/70 mt-1 uppercase tracking-wider">
-            <span>₹{paidThisWeek} paid</span>
-            <span>Max ₹{policy.maxWeeklyPayout}</span>
-          </div>
+      <div className="space-y-4">
+        <div className="relative h-2 bg-teal-950/50 rounded-full overflow-hidden">
+          <div 
+            className="absolute top-0 left-0 h-full bg-gradient-to-r from-teal-500 to-amber-500 transition-all duration-1000"
+            style={{ width: `${Math.min(100, percentageUsed)}%` }}
+          />
         </div>
+        
+        <div className="flex justify-between text-xs font-medium">
+          <span className="text-teal-400/60">₹{paidThisWeek} Claimed</span>
+          <span className="text-teal-400/60">Max: ₹{policy.maxWeeklyPayout}</span>
+        </div>
+      </div>
 
-        <div className="flex gap-4 pt-4 border-t border-teal-800/30">
-          <div className="flex items-center gap-1.5 text-xs text-teal-200">
-            <Target size={14} className="text-teal-500" />
-            <span>Auto-renew: {' '}
-              <span className="font-medium">
-                {new Date(policy.coverageEnd).toLocaleDateString('en-US', { weekday: 'short' })}
-              </span>
-            </span>
+      <div className="mt-8 pt-6 border-t border-teal-800/30 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-teal-800/30 flex items-center justify-center text-teal-400">
+            <Calendar size={18} />
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-teal-200">
-            <Clock size={14} className="text-amber-500" />
-            <span>{daysUntilRenewal()} days left</span>
+          <div>
+            <p className="text-[10px] text-teal-500/60 uppercase font-bold tracking-widest">Valid Until</p>
+            <p className="text-xs font-medium">{new Date(policy.coverageEnd).toLocaleDateString()}</p>
           </div>
         </div>
+        <button className="flex items-center gap-1 text-amber-500 text-sm font-semibold hover:text-amber-400 transition-colors">
+          View Details
+          <ArrowUpRight size={16} />
+        </button>
       </div>
     </div>
   );

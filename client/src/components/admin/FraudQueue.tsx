@@ -1,116 +1,152 @@
 import { useState, useEffect } from 'react';
-import { AlertOctagon, CheckCircle2, ShieldAlert, Cpu, Crosshair } from 'lucide-react';
 import { api } from '../../api/client';
+import { AlertTriangle, User, ShieldAlert, CheckCircle2, XCircle, ChevronRight } from 'lucide-react';
 
-export default function FraudQueue({ refreshKey, onAction }: { refreshKey?: number, onAction?: () => void }) {
-  const [items, setItems] = useState<any[]>([]);
+interface FraudClaim {
+  id: string;
+  worker: { name: string; city: string; riskScore: number; riskTier: string };
+  trigger: { triggerType: string; startedAt: string };
+  calculatedPayout: number;
+  fraudScore: number;
+  fraudFlags: string;
+  status: string;
+}
+
+export default function FraudQueue({ refreshKey, onAction }: { refreshKey: number; onAction: () => void }) {
+  const [claims, setClaims] = useState<FraudClaim[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadQueue() {
-      setLoading(true);
+    const fetchFraudQueue = async () => {
       try {
-        const res = await api.get('/admin/fraud-queue');
-        setItems(res.claims || []);
+        const data = await api.get('/admin/fraud-queue') as any;
+        setClaims(data.claims);
       } catch (err) {
-        console.error('Failed to load fraud queue', err);
+        console.error('Failed to fetch fraud queue', err);
       } finally {
         setLoading(false);
       }
-    }
-    loadQueue();
+    };
+    fetchFraudQueue();
   }, [refreshKey]);
 
   const handleAction = async (id: string, status: string) => {
     try {
-      await api.patch(`/admin/claims/${id}`, { status, note: `Admin review: manual ${status}` });
-      if (onAction) onAction();
-      setItems(items.filter(i => i.id !== id));
+      await api.patch(`/admin/claims/${id}`, { status });
+      onAction();
     } catch (err) {
       console.error('Action failed', err);
     }
   };
 
-  if (loading) {
-    return <div className="p-8 text-center text-slate-500">Loading fraud queue...</div>;
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center flex flex-col items-center justify-center">
-        <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
-          <ShieldAlert size={32} className="text-emerald-500" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-200">Zero Active Alerts</h3>
-        <p className="text-sm text-slate-500 mt-2 max-w-[300px]">The AI review model has not flagged any recent claims for manual inspection.</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 h-96 animate-pulse" />;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {items.map(claim => (
-        <div key={claim.id} className="bg-slate-900 border border-rose-500/30 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(225,29,72,0.05)] flex flex-col">
-          <div className="bg-rose-500/10 border-b border-rose-500/20 p-4 flex justify-between items-start">
-            <div className="flex items-center gap-2">
-              <AlertOctagon size={18} className="text-rose-500 animate-pulse" />
-              <h3 className="font-bold text-slate-100">Review Required</h3>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-black text-rose-500">{claim.fraudScore}<span className="text-sm text-rose-500/50">/100</span></div>
-              <div className="text-[10px] uppercase font-bold text-rose-400">Threat Score</div>
-            </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/30">
+            <ShieldAlert size={20} className="text-red-500" />
           </div>
-
-          <div className="p-5 flex-1 flex flex-col">
-            <div className="flex items-start justify-between mb-4 pb-4 border-b border-slate-800">
-              <div>
-                <div className="font-bold text-slate-200 text-lg">{claim.worker.name}</div>
-                <div className="text-xs text-slate-400 mt-0.5">{claim.worker.city} • <span className="capitalize">{claim.worker.platform}</span></div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold font-mono text-slate-200">₹{claim.calculatedPayout}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Claim Amt</div>
-              </div>
-            </div>
-
-            <div className="mb-5 flex-1">
-              <h4 className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2 flex items-center gap-1.5">
-                <Cpu size={12} className="text-amber-500" /> AI Diagnostic
-              </h4>
-              <p className="text-sm text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-800 border-l-2 border-l-amber-500">
-                "{claim.fraudResult?.explanation || 'Location mismatch detected during parametric event window.'}"
-              </p>
-              
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                <div className="p-2 rounded bg-slate-950/50 text-xs border border-slate-800 flex justify-between">
-                  <span className="text-slate-500">Event</span>
-                  <span className="font-medium text-slate-300 capitalize">{claim.trigger.triggerType.replace('_', ' ')}</span>
-                </div>
-                <div className="p-2 rounded bg-slate-950/50 text-xs border border-slate-800 flex justify-between">
-                  <span className="text-slate-500">Duration</span>
-                  <span className="font-medium text-slate-300">{claim.hoursCovered} hrs</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-auto grid grid-cols-2 gap-3 pt-4 border-t border-slate-800">
-              <button
-                onClick={() => handleAction(claim.id, 'rejected')}
-                className="py-2.5 rounded-lg border border-rose-500/50 text-rose-500 hover:bg-rose-500/10 font-medium text-sm transition-colors flex items-center justify-center gap-2"
-              >
-                <Crosshair size={16} /> REJECT
-              </button>
-              <button
-                onClick={() => handleAction(claim.id, 'approved')}
-                className="py-2.5 rounded-lg border border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10 font-medium text-sm transition-colors flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 size={16} /> APPROVE
-              </button>
-            </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-200">High Risk Fraud Queue</h2>
+            <p className="text-xs text-slate-500 tracking-wide font-medium">Claims flagged for manual review</p>
           </div>
         </div>
-      ))}
+        <div className="px-3 py-1 bg-slate-900 border border-slate-800 rounded-full text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          {claims.length} Items Pending
+        </div>
+      </div>
+
+      {claims.length === 0 ? (
+        <div className="bg-slate-950 border border-slate-800 border-dashed rounded-xl p-12 text-center">
+          <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 size={32} className="text-emerald-500" />
+          </div>
+          <h3 className="text-slate-300 font-bold">Queue All Clear</h3>
+          <p className="text-slate-500 text-sm mt-1 max-w-xs mx-auto">No claims currently meet the threshold for automated fraud flags.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {claims.map((c) => {
+            const isSelected = selectedId === c.id;
+            const flags = JSON.parse(c.fraudFlags || '[]');
+            return (
+              <div key={c.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden group hover:border-slate-700 transition-all">
+                <div 
+                  className={`p-5 flex items-center justify-between cursor-pointer ${isSelected ? 'bg-slate-800/50' : 'hover:bg-slate-800/20'}`}
+                  onClick={() => setSelectedId(isSelected ? null : c.id)}
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="relative">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-slate-400 ${c.fraudScore > 80 ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-amber-500/20 text-amber-500 border border-amber-500/30'}`}>
+                        <ShieldAlert size={24} />
+                      </div>
+                      <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-slate-950 border border-slate-800 flex items-center justify-center text-[10px] font-bold text-white shadow-xl">
+                        {c.fraudScore}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                        {c.worker.name}
+                        <span className="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded-full font-bold uppercase tracking-widest">₹{c.calculatedPayout?.toLocaleString()}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 flex items-center gap-4 mt-1">
+                        <span className="flex items-center gap-1 capitalize"><AlertTriangle size={10} className="text-amber-500" /> {c.trigger.triggerType.replace('_', ' ')}</span>
+                        <span className="flex items-center gap-1"><User size={10} /> {c.worker.city}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <div className="hidden sm:flex flex-col items-end">
+                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Fraud Risk</span>
+                      <span className={`text-xs font-black ${c.fraudScore > 80 ? 'text-red-500' : 'text-amber-500'}`}>{c.fraudScore > 80 ? 'CRITICAL' : 'ELEVATED'}</span>
+                    </div>
+                    <ChevronRight size={20} className={`text-slate-700 transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+                  </div>
+                </div>
+
+                {isSelected && (
+                  <div className="px-5 pb-5 pt-2 border-t border-slate-800 animate-slide-up">
+                    <div className="bg-slate-950/50 rounded-lg p-4 border border-slate-800/50 mb-4">
+                      <div className="flex items-center gap-2 text-rose-500 text-[10px] font-black uppercase tracking-widest mb-3">
+                        <ShieldAlert size={14} /> AI Analysis Reasoning
+                      </div>
+                      <ul className="space-y-2">
+                        {flags.length > 0 ? flags.map((flag: string, i: number) => (
+                          <li key={i} className="text-sm text-slate-400 flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0" />
+                            {flag}
+                          </li>
+                        )) : (
+                          <li className="text-sm text-slate-500 italic">No specific flags reported, manual verification required for score mismatch.</li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <button 
+                        onClick={() => handleAction(c.id, 'rejected')}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-red-500/10 text-slate-400 hover:text-red-500 border border-slate-800 hover:border-red-500/30 rounded-lg text-xs font-bold transition-all shadow-lg"
+                      >
+                        <XCircle size={16} /> REJECT CLAIM
+                      </button>
+                      <button 
+                         onClick={() => handleAction(c.id, 'approved')}
+                         className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-emerald-950/20 active:scale-95"
+                      >
+                        <CheckCircle2 size={16} /> APPROVE CLAIM
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

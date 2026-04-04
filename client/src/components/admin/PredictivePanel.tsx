@@ -1,89 +1,97 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, MapPin, IndianRupee, BellRing, Cpu, ShieldAlert } from 'lucide-react';
 import { api } from '../../api/client';
+import { TrendingUp, MapPin, ShieldAlert, Sparkles, AlertTriangle, ArrowRightCircle } from 'lucide-react';
 
-export default function PredictivePanel({ refreshKey = 0 }) {
-  const [data, setData] = useState<any>(null);
+interface Prediction {
+  high_risk_cities: string[];
+  estimated_payout_liability: number;
+  recommended_reserve: number;
+  operational_suggestion: string;
+}
+
+export default function PredictivePanel({ refreshKey }: { refreshKey: number }) {
+  const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadPredictions() {
-      setLoading(true);
+    const fetchPredictions = async () => {
       try {
-        const res = await api.get('/admin/predictions');
-        setData(res);
+        const data = await api.get('/admin/predictions') as any;
+        setPrediction(data);
       } catch (err) {
-        console.error('Failed to load predictions', err);
+        console.error('Failed to fetch predictions', err);
       } finally {
         setLoading(false);
       }
-    }
-    loadPredictions();
+    };
+    fetchPredictions();
   }, [refreshKey]);
 
-  if (loading || !data) {
-    return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 h-full min-h-[400px] flex flex-col items-center justify-center text-center">
-        <div className="relative w-16 h-16 mb-6">
-          <div className="absolute inset-0 border-2 border-amber-500/20 rounded-full animate-[spin_3s_linear_infinite]" />
-          <div className="absolute inset-0 border-2 border-transparent border-t-amber-500 rounded-full animate-spin" />
-          <Cpu className="absolute inset-0 m-auto text-amber-500" size={24} />
-        </div>
-        <h3 className="text-slate-300 font-medium mb-2">Claude AI Predictor</h3>
-        <p className="text-xs text-slate-500 max-w-[200px]">Analyzing weather forecasts and historical claims variance...</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 h-96 animate-pulse" />;
 
   return (
-    <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 border border-indigo-900/50 rounded-xl overflow-hidden h-full flex flex-col">
-      <div className="p-5 border-b border-indigo-900/30 flex items-center justify-between bg-indigo-950/20">
-        <div className="flex items-center gap-2">
-          <Sparkles className="text-amber-500" size={18} />
-          <h2 className="font-bold text-slate-100">AI Weekly Forecast</h2>
+    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden h-full flex flex-col">
+      <div className="p-5 border-b border-slate-800 bg-slate-950/20">
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles size={18} className="text-amber-500" />
+          <h2 className="font-bold text-slate-200">AI Weekly Forecast</h2>
         </div>
-        <span className="text-[10px] uppercase tracking-widest font-bold text-indigo-400 bg-indigo-900/40 px-2 py-1 rounded">Next 7 Days</span>
+        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5 opacity-80">
+          Powered by Claude-Sonnet-4
+        </p>
       </div>
 
-      <div className="p-6 flex-1 flex flex-col gap-6">
-        <div>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <MapPin size={14} className="text-rose-500" />
-            High Risk Geographies
-          </h3>
+      <div className="p-6 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+        {/* High Risk Cities */}
+        <section>
+          <div className="flex items-center gap-2 text-rose-500 text-[10px] font-black uppercase tracking-widest mb-3">
+            <AlertTriangle size={14} /> Critical Zones Next Week
+          </div>
           <div className="flex flex-wrap gap-2">
-            {data.high_risk_cities?.map((city: string) => (
-              <span key={city} className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm font-medium">
+            {prediction?.high_risk_cities.map((city, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/10 text-rose-500 border border-rose-500/30 rounded-lg text-xs font-bold shadow-lg shadow-rose-950/20">
+                <MapPin size={12} />
                 {city}
-              </span>
+              </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800">
-            <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <IndianRupee size={12} className="text-amber-500" /> Expected Liability
-            </h3>
-            <div className="text-xl font-bold font-mono text-slate-200">₹{data.estimated_payout_liability?.toLocaleString()}</div>
+        {/* Financial Exposure */}
+        <section className="grid grid-cols-1 gap-4">
+          <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/50 group hover:border-slate-700 transition-colors">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <TrendingUp size={12} /> Estimated Payout Liability
+            </p>
+            <h3 className="text-xl font-bold text-white group-hover:text-amber-500 transition-colors">₹{prediction?.estimated_payout_liability.toLocaleString()}</h3>
           </div>
-          <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800">
-            <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <ShieldAlert size={12} className="text-blue-500" /> Recommended Reserve
-            </h3>
-            <div className="text-xl font-bold font-mono text-slate-200">₹{data.recommended_reserve?.toLocaleString()}</div>
+          
+          <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800/50 group hover:border-slate-700 transition-colors">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+              <ShieldAlert size={12} /> Recommended Reserve
+            </p>
+            <h3 className="text-xl font-bold text-white group-hover:text-emerald-500 transition-colors">₹{prediction?.recommended_reserve.toLocaleString()}</h3>
           </div>
-        </div>
+        </section>
 
-        <div className="mt-auto pt-5 border-t border-indigo-900/20 mt-4">
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <BellRing size={14} className="text-indigo-400" />
-            Operational Suggestion
-          </h3>
-          <p className="text-sm text-indigo-200/90 leading-relaxed bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/10 italic">
-            "{data.operational_suggestion}"
-          </p>
-        </div>
+        {/* Operational Suggestion */}
+        <section className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full -translate-y-8 translate-x-8 blur-2xl group-hover:blur-3xl transition-all" />
+          <div className="relative">
+            <div className="flex items-center gap-2 text-amber-500 text-[10px] font-black uppercase tracking-widest mb-2.5">
+              <Sparkles size={14} /> Operational Strategy
+            </div>
+            <p className="text-sm text-slate-300 leading-relaxed font-medium">
+              {prediction?.operational_suggestion}
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <div className="p-4 bg-slate-950/50 border-t border-slate-800 flex items-center justify-center">
+        <button className="flex items-center gap-2 text-slate-500 hover:text-amber-500 text-[10px] font-black uppercase tracking-widest transition-all">
+          Generate Full Report <ArrowRightCircle size={14} />
+        </button>
       </div>
     </div>
   );

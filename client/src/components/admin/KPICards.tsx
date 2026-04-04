@@ -1,78 +1,60 @@
 import { useState, useEffect } from 'react';
-import { ShieldAlert, IndianRupee, PieChart, Activity } from 'lucide-react';
 import { api } from '../../api/client';
+import { Users, CreditCard, Banknote, Percent } from 'lucide-react';
 
-export default function KPICards({ refreshKey = 0 }) {
-  const [data, setData] = useState<any>(null);
+interface KPI {
+  activePolicies: number;
+  totalPremiums: number;
+  totalPayouts: number;
+  lossRatio: number;
+}
+
+export default function KPICards({ refreshKey }: { refreshKey: number }) {
+  const [kpis, setKpis] = useState<KPI | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadKPIs() {
+    const fetchKPIs = async () => {
       try {
-        const res = await api.get('/admin/kpis');
-        setData(res);
+        const data = await api.get('/admin/kpis') as any;
+        setKpis(data);
       } catch (err) {
-        console.error('Failed to load KPIs', err);
+        console.error('Failed to fetch KPIs', err);
+      } finally {
+        setLoading(false);
       }
-    }
-    loadKPIs();
+    };
+    fetchKPIs();
   }, [refreshKey]);
 
-  if (!data) return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {[1,2,3,4].map(i => <div key={i} className="h-28 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />)}
-    </div>
-  );
-
-  const kpis = [
-    {
-      title: 'Active Policies',
-      value: data.activePolicies,
-      subtext: 'This week',
-      icon: ShieldAlert,
-      color: 'text-emerald-500',
-      bg: 'bg-emerald-500/10 border-emerald-500/20'
-    },
-    {
-      title: 'Premiums Collected',
-      value: `₹${data.totalPremiums}`,
-      subtext: 'This week',
-      icon: IndianRupee,
-      color: 'text-amber-500',
-      bg: 'bg-amber-500/10 border-amber-500/20'
-    },
-    {
-      title: 'Payouts Disbursed',
-      value: `₹${data.totalPayouts}`,
-      subtext: 'This week',
-      icon: Activity,
-      color: 'text-rose-500',
-      bg: 'bg-rose-500/10 border-rose-500/20'
-    },
-    {
-      title: 'Loss Ratio',
-      value: `${data.lossRatio}%`,
-      subtext: 'Healthy < 65%',
-      icon: PieChart,
-      color: data.lossRatio > 65 ? 'text-rose-500' : 'text-blue-500',
-      bg: data.lossRatio > 65 ? 'bg-rose-500/10 border-rose-500/20' : 'bg-blue-500/10 border-blue-500/20'
-    }
+  const cards = [
+    { label: 'Active Policies', value: kpis?.activePolicies || 0, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { label: 'Premiums Collected', value: `₹${kpis?.totalPremiums?.toLocaleString() || 0}`, icon: CreditCard, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { label: 'Payouts Disbursed', value: `₹${kpis?.totalPayouts?.toLocaleString() || 0}`, icon: Banknote, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { label: 'Loss Ratio', value: `${kpis?.lossRatio || 0}%`, icon: Percent, color: 'text-rose-500', bg: 'bg-rose-500/10' },
   ];
 
+  if (loading) return <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    {[1, 2, 3, 4].map(i => (
+      <div key={i} className="bg-slate-900 border border-slate-800 p-6 rounded-xl animate-pulse h-32" />
+    ))}
+  </div>;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      {kpis.map((kpi, index) => {
-        const Icon = kpi.icon;
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {cards.map((card, i) => {
+        const Icon = card.icon;
         return (
-          <div key={index} className="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-700 transition-colors">
-            <div className="flex items-start justify-between mb-4">
-              <div className={`p-2.5 rounded-lg border ${kpi.bg}`}>
-                <Icon size={20} className={kpi.color} />
+          <div key={i} className="bg-slate-900 border border-slate-800 p-6 rounded-xl relative overflow-hidden group hover:border-slate-700 transition-colors">
+            <div className={`absolute top-0 right-0 w-24 h-24 ${card.bg} rounded-full -translate-y-12 translate-x-12 blur-2xl group-hover:blur-3xl transition-all`} />
+            <div className="relative flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">{card.label}</p>
+                <h3 className="text-2xl font-bold text-white">{card.value}</h3>
               </div>
-              <span className="text-xs text-slate-500 font-medium">{kpi.subtext}</span>
-            </div>
-            <div>
-              <h3 className="text-slate-400 text-sm font-medium mb-1">{kpi.title}</h3>
-              <div className="text-2xl font-bold tracking-tight text-white font-mono">{kpi.value}</div>
+              <div className={`w-12 h-12 rounded-lg ${card.bg} flex items-center justify-center ${card.color}`}>
+                <Icon size={24} />
+              </div>
             </div>
           </div>
         );

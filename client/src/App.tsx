@@ -1,107 +1,64 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import BottomNav from './components/BottomNav';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
+import Onboarding from './pages/Onboarding';
 import Policy from './pages/Policy';
-import Claims from './pages/Claims';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import { Loader2 } from 'lucide-react';
 
-// Require Auth Wrapper
-function RequireAuth({ children, requireAdmin = false, requireOnboarded = true }: 
-  { children: JSX.Element, requireAdmin?: boolean, requireOnboarded?: boolean }) {
-  const { worker, token, isLoading } = useAuth();
-  const location = useLocation();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-amber-500" size={40} />
-      </div>
-    );
-  }
-
-  if (!token || !worker) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (requireAdmin && !worker.isAdmin) {
-    return <Navigate to="/" replace />;
-  }
-
-  // If worker needs onboarding but tries to access main app
-  if (requireOnboarded && !worker.isAdmin && !worker.riskTier && location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
-  }
-
-  // If worker is onboarded but tries to access onboarding page
-  if (!requireOnboarded && worker.riskTier && location.pathname === '/onboarding') {
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { token, loading } = useAuth();
+  if (loading) return <div>Loading...</div>;
+  return token ? <>{children}</> : <Navigate to="/login" />;
 }
 
-// App Layout with Bottom Nav
-function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="pb-20 min-h-screen">
-      {children}
-      <BottomNav />
-    </div>
-  );
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { token, worker, loading } = useAuth();
+  if (loading) return <div>Loading...</div>;
+  if (!token) return <Navigate to="/login" />;
+  if (!worker?.isAdmin) return <Navigate to="/" />;
+  return <>{children}</> ;
 }
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        
-        <Route path="/onboarding" element={
-          <RequireAuth requireOnboarded={false}>
-            <Onboarding />
-          </RequireAuth>
-        } />
-
-        <Route path="/" element={
-          <RequireAuth>
-            <AppLayout><Dashboard /></AppLayout>
-          </RequireAuth>
-        } />
-
-        <Route path="/policy" element={
-          <RequireAuth>
-            <AppLayout><Policy /></AppLayout>
-          </RequireAuth>
-        } />
-
-        <Route path="/claims" element={
-          <RequireAuth>
-            <AppLayout><Claims /></AppLayout>
-          </RequireAuth>
-        } />
-
-        <Route path="/profile" element={
-          <RequireAuth>
-            <AppLayout><Profile /></AppLayout>
-          </RequireAuth>
-        } />
-
-        {/* Admin Route */}
-        <Route path="/admin" element={
-          <RequireAuth requireAdmin={true}>
-            <AdminDashboard />
-          </RequireAuth>
-        } />
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      
+      <Route path="/" element={
+        <PrivateRoute>
+          <Dashboard />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/onboarding" element={
+        <PrivateRoute>
+          <Onboarding />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/policy" element={
+        <PrivateRoute>
+          <Policy />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/profile" element={
+        <PrivateRoute>
+          <Profile />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/admin" element={
+        <AdminRoute>
+          <AdminDashboard />
+        </AdminRoute>
+      } />
+      
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
   );
 }

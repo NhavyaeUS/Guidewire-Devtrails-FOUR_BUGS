@@ -10,7 +10,7 @@ import SimulateDisruption from '../components/SimulateDisruption';
 
 export default function Dashboard() {
   const { worker } = useAuth();
-  const [data, setData] = useState<{ policy: any, remainingPayout: number, paidThisWeek: number } | null>(null);
+  const [data, setData] = useState<{ policy: any, remainingPayout: number, paidThisWeek: number, lifetimePaid: number } | null>(null);
   const [claims, setClaims] = useState<any[]>([]);
   const [triggerUpdate, setTriggerUpdate] = useState(0);
 
@@ -63,6 +63,19 @@ export default function Dashboard() {
         )}
 
         <SimulateDisruption onComplete={handleSimulationComplete} />
+
+        {/* Earnings Protected Widget */}
+        <div className="glass-card p-5 border-l-4 border-l-amber-500 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+              <Sparkles size={24} />
+            </div>
+            <div>
+              <p className="text-xs text-teal-500/60 uppercase font-bold tracking-widest mb-0.5">Total Earnings Protected</p>
+              <h3 className="text-2xl font-bold text-white">₹{data?.lifetimePaid?.toLocaleString() || '0'}</h3>
+            </div>
+          </div>
+        </div>
 
         <div className="pt-2">
           <ClaimsTimeline claims={claims} limit={3} />

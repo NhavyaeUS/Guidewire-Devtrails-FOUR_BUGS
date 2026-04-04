@@ -100,14 +100,14 @@ router.patch('/claims/:id', adminMiddleware, async (req: AuthRequest, res: Respo
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const claim = await prisma.claim.findUnique({ where: { id: req.params.id } });
+    const claim = await prisma.claim.findUnique({ where: { id: req.params.id as string } });
     if (!claim) return res.status(404).json({ error: 'Claim not found' });
     if (claim.status !== 'flagged' && claim.status !== 'auto-triggered') {
       return res.status(400).json({ error: 'Claim has already been processed' });
     }
 
     const updated = await prisma.claim.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: {
         status,
         reviewedAt: new Date(),
@@ -161,6 +161,44 @@ router.get('/predictions', adminMiddleware, async (_req: AuthRequest, res: Respo
     res.json(prediction);
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to generate predictions' });
+  }
+});
+
+// GET /api/admin/active-triggers
+router.get('/active-triggers', adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    const triggers = await prisma.disruptionTrigger.findMany({
+      where: {
+        startedAt: { gte: twentyFourHoursAgo }
+      },
+      orderBy: { startedAt: 'desc' },
+      take: 20
+    });
+
+    const triggerData = await Promise.all(triggers.map(async (t) => {
+      const affectedPolicies = await prisma.policy.count({
+        where: {
+          worker: {
+            city: t.city,
+            zone: t.zone
+          },
+          status: 'active',
+          coverageStart: { lte: new Date() },
+          coverageEnd: { gte: new Date() }
+        }
+      });
+
+      return {
+        ...t,
+        affectedPolicies
+      };
+    }));
+
+    res.json({ triggers: triggerData });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch active triggers' });
   }
 });
 

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, ShieldAlert, Cpu, CheckCircle2, ChevronRight, Activity, Zap } from 'lucide-react';
+import { Shield, ShieldAlert, Cpu, CheckCircle2, ChevronRight, Activity, Zap, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { TextSkeleton } from '../components/SkeletonLoader';
 
 interface Tier {
   id: string;
@@ -109,7 +108,7 @@ export default function Onboarding() {
           Analyzing historical weather, flood data, and civic disruptions for {worker?.city}.
         </p>
         <div className="w-full max-w-sm glass-card p-5 space-y-4">
-          <TextSkeleton lines={4} />
+          <div className="animate-pulse space-y-2"><div className="h-4 bg-teal-800 rounded w-3/4"></div><div className="h-4 bg-teal-800 rounded w-full"></div><div className="h-4 bg-teal-800 rounded w-5/6"></div><div className="h-4 bg-teal-800 rounded w-1/2"></div></div>
         </div>
       </div>
     );

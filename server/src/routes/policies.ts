@@ -97,7 +97,21 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res: Response) =>
 
     const remainingPayout = policy.maxWeeklyPayout - (paidThisWeek._sum.amount || 0);
 
-    res.json({ policy, remainingPayout, paidThisWeek: paidThisWeek._sum.amount || 0 });
+    const lifetimePaidQuery = await prisma.payout.aggregate({
+      where: {
+        workerId: req.workerId!,
+        status: 'completed'
+      },
+      _sum: { amount: true }
+    });
+    const lifetimePaid = lifetimePaidQuery._sum.amount || 0;
+
+    res.json({ 
+      policy, 
+      remainingPayout, 
+      paidThisWeek: paidThisWeek._sum.amount || 0,
+      lifetimePaid 
+    });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to fetch policy' });
   }

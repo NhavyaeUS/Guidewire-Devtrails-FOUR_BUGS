@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shield, CheckCircle2, AlertCircle, Clock, Zap, ArrowRight, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
-import { CardSkeleton } from '../components/SkeletonLoader';
+
 
 export default function Policy() {
   const [data, setData] = useState<{ policy: any, remainingPayout: number, paidThisWeek: number } | null>(null);
@@ -35,7 +35,7 @@ export default function Policy() {
     }
   };
 
-  if (loading) return <div className="p-5 pt-8"><CardSkeleton /></div>;
+  if (loading) return <div className="p-5 pt-8 flex justify-center items-center text-teal-400 h-[60vh]">Loading policy details...</div>;
 
   const { policy, remainingPayout, paidThisWeek } = data || {};
 
